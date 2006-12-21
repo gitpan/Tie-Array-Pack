@@ -1,0 +1,9 @@
+#
+# $Id: Changes,v 0.1 2006/12/21 21:30:29 dankogai Exp dankogai $
+#
+Revision history for Perl extension Tie::Array::Pack.
+
+0.01  Thu Dec 21 22:25:25 2006
+	- original version; created by h2xs 1.23 with options
+		-XA Tie::Array::Pack
+
