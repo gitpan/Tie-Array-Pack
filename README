@@ -3,8 +3,8 @@ NAME
 
 SYNOPSIS
       use Tie::Array::Pack
-      tie @array, Tie::Array::Pack => 'l';
-      $array[$_] = rand for (1..1e6); # slow but memory-efficient
+      tie @array, Tie::Array::Pack => 'd';
+      $array[$_] = rand() for (1..1e6); # slow but memory-efficient
 
 INSTALLATION
     To install this module type the following as usual.
@@ -77,23 +77,23 @@ DESCRIPTION
 
   HOW SLOW IS IT?
     Since this module has to pack() for each STORE and unpack() for each
-    FETCH, it is much slower than the native array. Still it is almost as
-    fast as in-memory DB_File (with $DB_RECNO) and much, much faster than
-    Tie::File. Below is the result on my MacBook Pro.
+    FETCH, it is much slower than the native array. Still it is as fast as
+    in-memory DB_File (with $DB_RECNO) and much, much faster than Tie::File.
+    Below is the result on my MacBook Pro.
 
     n = 1000
-                  Rate    T::F T::A::P DB_File  native
-        T::F    3.77/s      --    -98%    -98%   -100%
-        T::A::P  155/s   4018%      --     -5%    -93%
-        DB_File  163/s   4214%      5%      --    -92%
-        native  2073/s  54913%   1236%   1175%      --
+                 Rate    T::F DB_File T::A::P  native
+       T::F    3.80/s      --    -98%    -98%   -100%
+       DB_File  158/s   4049%      --     -4%    -92%
+       T::A::P  164/s   4209%      4%      --    -92%
+       native  2058/s  54016%   1204%   1156%      --
 
     n = 10000
-                  Rate    T::F T::A::P DB_File  native
-        T::F    1.06/s      --    -93%    -94%    -99%
-        T::A::P 15.5/s   1365%      --     -7%    -92%
-        DB_File 16.6/s   1469%      7%      --    -91%
-        native   194/s  18248%   1153%   1069%      --
+                 Rate    T::F DB_File T::A::P  native
+       T::F    1.06/s      --    -93%    -93%    -99%
+       DB_File 15.8/s   1393%      --     -1%    -92%
+       T::A::P 15.9/s   1409%      1%      --    -92%
+       native   194/s  18248%   1129%   1116%      --
 
 SEE ALSO
     In Perl Core:

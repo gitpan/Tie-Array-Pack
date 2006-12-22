@@ -1,17 +1,20 @@
 package Tie::Array::Pack;
 #
-# $Id: Pack.pm,v 0.1 2006/12/21 21:30:29 dankogai Exp dankogai $
+# $Id: Pack.pm,v 0.2 2006/12/22 03:20:22 dankogai Exp $
 #
 use 5.008001;
 use strict;
 use warnings;
-our $VERSION = sprintf "%d.%02d", q$Revision: 0.1 $ =~ /(\d+)/g;
+our $VERSION = sprintf "%d.%02d", q$Revision: 0.2 $ =~ /(\d+)/g;
 use Carp;
+
 # we don't need Tie::Array anymore -- all methods implemented!
 # use base 'Tie::Array';
 use bytes ();
 
 our $DEBUG = 0;
+
+sub DESTROY { }    # no-op
 
 sub TIEARRAY {
     my $class = shift;
@@ -23,29 +26,29 @@ sub TIEARRAY {
         str   => '',
         fmt   => $fmt,
         size  => $size,
-        count => 0,
         empty => $empty
     };
 }
 
 sub FETCH {
-    my ( $this, $index ) = @_;
-    warn "$this->FETCH($index)" if $DEBUG;
-    unpack( $this->{fmt},
-        substr( $this->{str}, $this->{size} * $index, $this->{size} ) );
+    $DEBUG and warn sprintf "%s->FETCH(%d)", @_;
+    unpack( $_[0]->{fmt},
+        substr( $_[0]->{str}, $_[0]->{size} * $_[1], $_[0]->{size} ) );
 }
 
 sub FETCHSIZE {
-    my ($this) = @_;
-    warn "$this->FETCHSIZE" if $DEBUG;
-    $this->{count};
+    $DEBUG and warn sprintf( "%s->FETCHSIZE", $_[0] );
+    use integer;
+    bytes::length( $_[0]->{str} ) / $_[0]->{size};
 }
 
 sub STORE {
     my ( $this, $index, $value ) = @_;
-    warn "$this->STORE($index, $value)" if $DEBUG;
+    $DEBUG and warn "$this->STORE($index, $value)";
     my $retval =
-      $this->{count} - $index < 1 ? $this->STORESIZE( $index + 1 ) : $value;
+        $this->FETCHSIZE - $index < 1
+      ? $this->STORESIZE( $index + 1 )
+      : $value;
     substr(
         $this->{str}, $this->{size} * $index,
         $this->{size}, pack( $this->{fmt}, $value )
@@ -54,69 +57,66 @@ sub STORE {
 
 sub STORESIZE {
     my ( $this, $count ) = @_;
-    warn "$this->STORESIZE($count)" if $DEBUG;
-    return $this->EXTEND($count) if $this->{count} < $count;
-    if ( $this->{count} > $count ) {
-        $this->{count} = $count;
-        $this->{str} = substr( $this->{str}, 0, $this->{size} * $count );
+    $DEBUG and warn "$this->STORESIZE($count)";
+    return $this->EXTEND($count) if $this->FETCHSIZE < $count;
+    if ( $this->FETCHSIZE > $count ) {
+        substr( $this->{str}, $this->{size} * $count, $this->{size}, '' );
     }
     return $count;
 }
 
 sub EXISTS {
     my ( $this, $key ) = @_;
-    warn "$this->EXISTS($key)" if $DEBUG;
-    return $this->{count} > $key;
+    $DEBUG and warn "$this->EXISTS($key)";
+    return $this->FETCHSIZE > $key;
 }
 
 sub EXTEND {
     my ( $this, $count ) = @_;
-    warn "$this->EXTEND($count)" if $DEBUG;
-    my $extend = $count - $this->{count};
+    $DEBUG and warn "$this->EXTEND($count)";
+    my $extend = $count - $this->FETCHSIZE;
     if ( $extend > 0 ) {
         $this->{str} .= pack( $this->{fmt}, $this->{empty} ) x $extend;
-        $this->{count} = $count;
+        $this->STORESIZE($count);
     }
     return undef;
 }
 
 sub DELETE {
     my ( $this, $index ) = @_;
-    warn "$this->DELETE($index)" if $DEBUG;
+    $DEBUG and warn "$this->DELETE($index)";
     substr( $this->{str}, $this->{size} * $index, $this->{size}, '' );
-    $this->{count}--;
 }
 
 sub CLEAR {
     my ( $this, $index ) = @_;
-    warn "$this->CLEAR" if $DEBUG;
-    $this->{str}   = '';
-    $this->{count} = 0;
+    $DEBUG and warn "$this->CLEAR";
+    $this->{str} = '';
 }
 
 sub PUSH {    # append
     my $this = shift;
-    local ($") = ",";
-    warn "$this->PUSH(@_)" if $DEBUG;
-    use Data::Dumper;
-    local $Data::Dumper::Useqq = 1;
-    $this->{count} += @_;
+    if ($DEBUG) {
+        local ($") = ",";
+        warn "$this->PUSH(@_)";
+    }
     $this->{str} .= pack( $this->{fmt} x @_, @_ );
 }
 
 sub UNSHIFT {    # prepend
     my $this = shift;
-    local ($") = ",";
-    warn "$this->UNSHIFT(@_)" if $DEBUG;
-    $this->{count} += @_;
+    if ($DEBUG) {
+        local ($") = ",";
+        warn "$this->UNSHIFT(@_)";
+    }
     $this->{str} = pack( $this->{fmt} x @_, @_ ) . $this->{str};
 }
 
 sub POP {
     my $this = shift;
-    warn "$this->POP" if $DEBUG;
+    $DEBUG and warn "$this->POP";
     my $val;
-    my $newsize = $this->{count} - 1;
+    my $newsize = $this->FETCHSIZE - 1;
     if ( $newsize >= 0 ) {
         $val = $this->FETCH($newsize);
         $this->STORESIZE($newsize);
@@ -126,9 +126,9 @@ sub POP {
 
 sub SHIFT {
     my $this = shift;
-    warn "$this->SHIFT" if $DEBUG;
+    $DEBUG and warn "$this->SHIFT";
     my $val;
-    my $newsize = $this->{count} - 1;
+    my $newsize = $this->FETCHSIZE - 1;
     if ( $newsize >= 0 ) {
         $val = $this->FETCH(0);
         $this->DELETE(0);
@@ -138,12 +138,14 @@ sub SHIFT {
 
 sub SPLICE {
     my $this = shift;
-    local ($") = ",";
-    warn "$this->SPLICE(@_)" if $DEBUG;
+    if ($DEBUG) {
+        local ($") = ",";
+        warn "$this->SPLICE(@_)";
+    }
     my $off = (@_) ? shift: 0;
-    $off += $this->{count} if ( $off < 0 );
-    my $len = (@_) ? shift: $this->{count} - $off;
-    $len += $this->{count} - $off if $len < 0;
+    $off += $this->FETCHSIZE if ( $off < 0 );
+    my $len = (@_) ? shift: $this->FETCHSIZE - $off;
+    $len += $this->FETCHSIZE - $off if $len < 0;
     my @result = unpack(
         $this->{fmt} . $len,
         substr( $this->{str}, $off * $this->{size}, $len * $this->{size} )
@@ -154,7 +156,6 @@ sub SPLICE {
         $len * $this->{size},
         pack( $this->{fmt} x @_, @_ )
     );
-    $this->{count} += @_ - $len;
     return wantarray ? @result : pop @result;
 }
 
@@ -168,8 +169,8 @@ Tie::Array::Pack - An array implemented as a packed string
 =head1 SYNOPSIS
 
   use Tie::Array::Pack
-  tie @array, Tie::Array::Pack => 'l';
-  $array[$_] = rand for (1..1e6); # slow but memory-efficient
+  tie @array, Tie::Array::Pack => 'd';
+  $array[$_] = rand() for (1..1e6); # slow but memory-efficient
 
 =head1 INSTALLATION
 
@@ -249,27 +250,27 @@ In this case, the warning is issued.
 =head2 HOW SLOW IS IT?
 
 Since this module has to pack() for each STORE and unpack() for each
-FETCH, it is much slower than the native array.  Still it is almost as
-fast as in-memory DB_File (with $DB_RECNO) and much, much faster than
+FETCH, it is much slower than the native array.  Still it is as fast
+as in-memory DB_File (with $DB_RECNO) and much, much faster than
 Tie::File.  Below is the result on my MacBook Pro.
 
 =over 2
 
 =item n = 1000
 
-            Rate    T::F T::A::P DB_File  native
-  T::F    3.77/s      --    -98%    -98%   -100%
-  T::A::P  155/s   4018%      --     -5%    -93%
-  DB_File  163/s   4214%      5%      --    -92%
-  native  2073/s  54913%   1236%   1175%      --
+           Rate    T::F DB_File T::A::P  native
+ T::F    3.80/s      --    -98%    -98%   -100%
+ DB_File  158/s   4049%      --     -4%    -92%
+ T::A::P  164/s   4209%      4%      --    -92%
+ native  2058/s  54016%   1204%   1156%      --
 
 =item n = 10000
 
-            Rate    T::F T::A::P DB_File  native
-  T::F    1.06/s      --    -93%    -94%    -99%
-  T::A::P 15.5/s   1365%      --     -7%    -92%
-  DB_File 16.6/s   1469%      7%      --    -91%
-  native   194/s  18248%   1153%   1069%      --
+           Rate    T::F DB_File T::A::P  native
+ T::F    1.06/s      --    -93%    -93%    -99%
+ DB_File 15.8/s   1393%      --     -1%    -92%
+ T::A::P 15.9/s   1409%      1%      --    -92%
+ native   194/s  18248%   1129%   1116%      --
 
 =back
 
